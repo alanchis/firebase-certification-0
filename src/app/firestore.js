@@ -3,6 +3,7 @@ import {
   getStorage,
   ref,
   uploadBytes,
+  deleteObject,
   getDownloadURL,
 } from "https://www.gstatic.com/firebasejs/9.20.0/firebase-storage.js";
 import {
@@ -35,6 +36,8 @@ const loadingSpinner = document.querySelector("#loader");
 
 let uidNo;
 let urlSrc;
+let storageRef;
+let fullPath;
 
 // Upload File
 // const uploadFile = async (file) => {
@@ -50,8 +53,9 @@ let urlSrc;
 
 async function uploadFile(file) {
   const dateNow = new Date().toISOString();
-  const storageRef = ref(storage, `images/${dateNow}${file.name}`);
-  await uploadBytes(storageRef, file);
+  storageRef = ref(storage, `images/${dateNow}${file.name}`);
+  const result = await uploadBytes(storageRef, file);
+  fullPath = result.metadata.fullPath;
   const url = await getDownloadURL(storageRef);
   return url;
 }
@@ -64,11 +68,12 @@ addForm.addEventListener("submit", async (e) => {
   const imageToAdd = addForm["uploadFile"].files[0];
 
   loadingSpinner.style.display = "block";
-  console.log(imageToAdd);
+  // console.log(imageToAdd);
 
   if (addForm["uploadFile"].files.length == 0) {
     console.log("no image added");
-    urlSrc = "/src/media/images/grocery.png";
+    urlSrc =
+      "https://firebasestorage.googleapis.com/v0/b/probando0104.appspot.com/o/grocery.png?alt=media&token=666ddc06-b6ec-4c59-a14f-a2c707cbf0d0";
   } else {
     console.log("a file will be uploaded");
     const result = await uploadFile(imageToAdd);
@@ -106,16 +111,17 @@ addForm.addEventListener("submit", async (e) => {
     showMessage("Item added successfully", "green");
     loadingSpinner.style.display = "none";
 
-    itemToAdd.value = "";
+    addForm.reset();
   } catch (error) {
     // showMessage("Something went wrong, try again", "red");
     // console.log(error.code, error.message);
     // showMessage("Error adding item", "red");
-    itemToAdd.value = "";
+    // itemToAdd.value = "";
   }
+  addForm.reset();
 });
 
-// Delete from FireStore
+// Delete docs from FireStore
 export const deleteItem = (id) => {
   onAuthStateChanged(auth, (user) => {
     if (user) {
@@ -123,6 +129,13 @@ export const deleteItem = (id) => {
     }
   });
   deleteDoc(doc(db, "grocery", "items", uidNo, id));
+};
+
+// Delete object from storage
+const deleteImage = async (id) => {
+  const objRef = ref(storage, "images/chocolate.jpg");
+  const result = await deleteObject(objRef);
+  console.log(result);
 };
 
 // Listen to changes
@@ -217,6 +230,7 @@ onGetTasks((querySnapshot) => {
             <p>
             <strong>Added by:</strong> ${item.user || auth.currentUser.email}
             </p>
+    
             <p>
              <strong>Date:</strong> ${item.date
                .toDate()
