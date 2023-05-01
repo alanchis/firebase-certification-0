@@ -65,6 +65,7 @@ logout.addEventListener("click", async (user) => {
     profilePicture.src = "";
     userLoggedInName.textContent = "";
     itemContainer.innerHTML = "";
+    window.location.reload();
     // location.reload();
   } else {
   }

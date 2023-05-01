@@ -10,6 +10,7 @@ import {
   getFirestore,
   doc,
   setDoc,
+  getDoc,
   addDoc,
   getDocs,
   collection,
@@ -21,9 +22,11 @@ import {
   getAuth,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/9.20.0/firebase-auth.js";
+import { logEvent } from "https://www.gstatic.com/firebasejs/9.20.0/firebase-analytics.js";
 import { db, storage } from "./firebase.js";
 import { showMessage } from "./showMessage.js";
 import { loginCheck } from "./authentication.js";
+import { analytics } from "./firebase.js";
 
 //DOM Elements
 const userLoggedInName = document.querySelector("#user-loggedin");
@@ -33,31 +36,28 @@ const itemContainer = document.getElementById("item-container");
 const profilePicture = document.querySelector("#profile-pic");
 const uploadFileBtn = document.querySelector("#uploadFile");
 const loadingSpinner = document.querySelector("#loader");
+const container1 = document.querySelector(".container1");
 
 let uidNo;
 let urlSrc;
 let storageRef;
 let fullPath;
+let ref1;
 
+// console.log(auth);
+
+const canastaBasica = ["milk", "Milk", "water", "Water", "juice", "Juice"];
 // Upload File
-// const uploadFile = async (file) => {
-//   const dateNow = new Date().toISOString();
-//   const storageRef = ref(storage, `images/${dateNow}${file.name}`);
-//   const result = await uploadBytes(storageRef, file);
-//   console.log(`${file.name} was uploaded successfully`);
-//   console.log(result);
-//   const url = getDownloadURL(storageRef);
-//   console.log(url);
-//   return url;
-// };
 
 async function uploadFile(file) {
   const dateNow = new Date().toISOString();
-  storageRef = ref(storage, `images/${dateNow}${file.name}`);
+  ref1 = dateNow + file.name;
+  storageRef = ref(storage, `images/${ref1}`);
   const result = await uploadBytes(storageRef, file);
   fullPath = result.metadata.fullPath;
   const url = await getDownloadURL(storageRef);
   return url;
+  // return [url, ref1];
 }
 
 loadingSpinner.style.display = "none";
@@ -67,7 +67,13 @@ addForm.addEventListener("submit", async (e) => {
   const itemToAdd = addForm["itemToAdd"].value;
   const imageToAdd = addForm["uploadFile"].files[0];
 
-  loadingSpinner.style.display = "block";
+  if (auth.currentUser == null) {
+    showMessage("Please login first", "red");
+    addForm.reset();
+
+    return;
+  }
+
   // console.log(imageToAdd);
 
   if (addForm["uploadFile"].files.length == 0) {
@@ -80,10 +86,7 @@ addForm.addEventListener("submit", async (e) => {
     console.log(result);
     console.log("upload was successful");
     urlSrc = result;
-    // console.log("urlSrc: " + urlSrc);
   }
-
-  // console.log(urlSrc);
 
   onAuthStateChanged(auth, (user) => {
     if (user) {
@@ -97,16 +100,16 @@ addForm.addEventListener("submit", async (e) => {
     await addDoc(collection(db, "grocery", "items", uidNo), {
       item: itemToAdd,
       date: Timestamp.fromDate(new Date()),
-      user: auth.currentUser.displayName,
+      user: auth.currentUser.displayName || auth.currentUser.email,
       img: urlSrc,
+      ref: ref1 || "default",
     });
+    loadingSpinner.style.display = "block";
 
-    // await setDoc(doc(db, `items`, "abc", uidNo, itemToAdd), {
-    //   item: itemToAdd.toString(),
-    //   date: Timestamp.fromDate(new Date()),
-    //   user: auth.currentUser.displayName,
-    //   userId: uidNo,
-    // });
+    if (canastaBasica.includes(itemToAdd)) {
+      logEvent(analytics, "add_to_cart", itemToAdd);
+      console.log("el item es liquido");
+    }
 
     showMessage("Item added successfully", "green");
     loadingSpinner.style.display = "none";
@@ -127,13 +130,16 @@ export const deleteItem = (id) => {
     if (user) {
       uidNo = user.uid;
     }
+
+    console.log(id);
   });
+
   deleteDoc(doc(db, "grocery", "items", uidNo, id));
 };
 
 // Delete object from storage
-const deleteImage = async (id) => {
-  const objRef = ref(storage, "images/chocolate.jpg");
+const deleteImage = async (refer) => {
+  const objRef = ref(storage, `images/${refer}`);
   const result = await deleteObject(objRef);
   console.log(result);
 };
@@ -148,65 +154,16 @@ export const onGetTasks = (callback) => {
   });
 };
 
-// window.addEventListener("DOMContentLoaded", async () => {
-//   onGetTasks((querySnapshot) => {
-//     itemContainer.innerHTML = "";
-//     querySnapshot.forEach((doc) => {
-//       const item = doc.data();
-
-//       itemContainer.innerHTML += `
-
-//         <article>
-//           <div class="article-wrapper">
-//             <figure>
-//               <img src="./../media/images/lake.jpg" alt="" />
-//             </figure>
-//             <div class="article-body">
-//               <h1>${item.item}</h2>
-//               <p>
-//               Added by ${item.user}
-//               </p>
-//               <p>
-//                ${item.date}
-//               </p>
-//               <button  class="btn btn-danger btn-delete" data-id="${doc.id}">Delete</button>
-//             </div>
-//           </div>
-//         </article>
-
-//         `;
-//     });
-//     const btnsDelete = itemContainer.querySelectorAll(".btn-delete");
-//     // console.log(btnsDelete);
-
-//     btnsDelete.forEach((btn) => {
-//       btn.addEventListener("click", async ({ target: { dataset } }) => {
-//         try {
-//           deleteItem(dataset.id);
-//           console.log("deleted item: " + dataset.id);
-
-//           showMessage("Item deleted successfully", "green");
-
-//           onAuthStateChanged(auth, (user) => {
-//             if (user) {
-//               uidNo = user.uid;
-//             }
-//           });
-
-//           await onGetTasks(collection, "grocery", "items", uidNo), () => {};
-//         } catch (error) {
-//           showMessage("Deletion went wrong, try again", "red");
-//           console.log(error.code, error.message);
-//         }
-//       });
-//     });
-//   });
-// });
 onGetTasks((querySnapshot) => {
   itemContainer.innerHTML = "";
   // console.log(auth.currentUser);
   querySnapshot.forEach((doc) => {
     const item = doc.data();
+    const itemWord = item.item;
+    const firstLetterWord = itemWord.charAt(0).toUpperCase();
+    const wordRest = itemWord.slice(1);
+    const upperCasedWord = firstLetterWord + wordRest;
+    // console.log(upperCasedWord);
 
     const options = {
       weekday: "long",
@@ -219,33 +176,23 @@ onGetTasks((querySnapshot) => {
     };
 
     itemContainer.innerHTML += `
-
-      <article>
-        <div class="article-wrapper">
-          <figure>
-            <img src="${item.img} " alt="" />
-          </figure>
-          <div class="article-body">
-            <h3>${item.item}</h3>
-            <p>
-            <strong>Added by:</strong> ${item.user || auth.currentUser.email}
-            </p>
-    
-            <p>
-             <strong>Date:</strong> ${item.date
-               .toDate()
-               .toLocaleString("en-US", options)}
-            </p>
-     
-            <button  class="btn btn-danger btn-delete" data-id="${
-              doc.id
-            }">Delete</button>
-          </div>
-        </div>
-      </article>
-
-
-      `;
+    <div class="card">
+    <div class="card-image">
+      <img src="${item.img} ">
+    </div>
+    <div class="card-text">
+      
+      <h2 class="card-title">${upperCasedWord}</h2>
+      <p class="card-body"><b>Added by: </b> ${
+        item.user || auth.currentUser.email
+      }</p>
+      <p class="card-body"><b> Date:</b> ${item.date
+        .toDate()
+        .toLocaleString("en-Us", options)}</p>
+    </div>
+    <div class="card-price btn-delete " data-id="${doc.id}">Delete</div>
+  </div>
+    `;
     addForm["itemToAdd"].value = "";
     addForm["uploadFile"].value = "";
   });
@@ -256,18 +203,28 @@ onGetTasks((querySnapshot) => {
   btnsDelete.forEach((btn) => {
     btn.addEventListener("click", async ({ target: { dataset } }) => {
       try {
-        console.log("deleted item: " + dataset.id);
-        deleteItem(dataset.id);
-
-        showMessage("Item deleted successfully", "green");
-
         onAuthStateChanged(auth, (user) => {
           if (user) {
             uidNo = user.uid;
           }
         });
+        const docRef = doc(db, "grocery/items", uidNo, dataset.id);
+        const docSnap = await getDoc(docRef);
 
-        await onGetTasks(collection, "grocery", "items", uidNo), () => {};
+        if (docSnap.exists()) {
+          const ref1 = docSnap.data().ref;
+          deleteImage(ref1);
+        } else {
+          // docSnap.data() will be undefined in this case
+          console.log("No such document!");
+        }
+
+        deleteItem(dataset.id);
+        console.log("deleted item: " + dataset.id);
+
+        showMessage("Item deleted successfully", "green");
+
+        // await onGetTasks(collection, "grocery", "items", uidNo), () => {};
       } catch (error) {
         showMessage("Deletion went wrong, try again", "red");
         console.log(error.code, error.message);
@@ -292,62 +249,3 @@ onAuthStateChanged(auth, async (user) => {
     console.log("user is not signed");
   }
 });
-
-// export const setupItems = (data) => {
-//   if (data.length) {
-//     let html = "";
-//     data.forEach((doc) => {
-//       const item = doc.data();
-//       const li = `
-//       <section class="articles">
-//       <article>
-//         <div class="article-wrapper">
-//           <figure>
-//             <img src="" alt="" />
-//           </figure>
-//           <div class="article-body">
-//             <h1>${item.item}</h2>
-
-//             <p>
-//             Added by ${item.user}
-//             </p>
-//             <p>
-//              ${item.date.toDate()}
-//             </p>
-//             <button type="button" class="btn btn-danger btn-delete" data-id="${
-//               doc.id
-//             }">Delete</button>
-
-//           </div>
-//         </div>
-//       </article>
-
-//     </section>
-//       `;
-
-//       html += li;
-//     });
-//     itemContainer.innerHTML = html;
-
-//     const btnsDelete = itemContainer.querySelectorAll(".btn-delete");
-
-//     btnsDelete.forEach((btn) => {
-//       btn.addEventListener("click", async ({ target: { dataset } }) => {
-//         try {
-//           console.log("deleted item: " + dataset.id);
-//           deleteItem(dataset.id);
-//           // location.reload();
-//           showMessage("Item deleted successfully", "green");
-//           // window.location.reload();
-//           // return false;
-//           await onGetTasks(collection, "items"), () => {};
-//         } catch (error) {
-//           showMessage("Deletion went wrong, try again", "red");
-//           console.log(error.code, error.message);
-//         }
-//       });
-//     });
-//   } else {
-//     itemContainer.innerHTML = "<h1>Add your first item</h1>";
-//   }
-// };
